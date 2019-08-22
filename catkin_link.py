@@ -21,6 +21,8 @@ def symlink_compile_commands_for_pkg(build_space, src_space, pkg_name):
                                          compile_commands_name)
 
     if not os.path.exists(compile_commands_file):
+        print(("Compile commands file '{0}' for pkg '{1}' does not "
+               "exist - skipping".format(compile_commands_file, pkg_name)))
         return
 
     pkg_in_src_space = os.path.join(src_space, pkg_name)
@@ -45,8 +47,8 @@ def symlink_compile_commands_for_all_pkgs(ws_root):
     folders_to_ignore = ["catkin_tools_prebuild"]
     dirs_to_symlink = filter(lambda d: d not in folders_to_ignore, dirs)
 
-    for d in dirs_to_symlink:
-        symlink_compile_commands_for_pkg(build_space, src_space, d)
+    for pkg in dirs_to_symlink:
+        symlink_compile_commands_for_pkg(build_space, src_space, pkg)
 
 
 if __name__ == "__main__":
