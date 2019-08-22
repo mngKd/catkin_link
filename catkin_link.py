@@ -160,12 +160,14 @@ def main():
     if not is_catkin_ws(abs_ws_root):
         print(("Given argument '{0}' is not a catkin workspace -"
                " aborting".format(abs_ws_root)))
+        sys.exit(1)
 
     build_space = get_build_space(abs_ws_root)
     if not build_space:
         print("Can not get build space - aborting", file=sys.stderr)
-    src_space = os.path.join(abs_ws_root, "src")
+        sys.exit(1)
 
+    src_space = os.path.join(abs_ws_root, "src")
     pkgs_with_path = get_pkgs_in_ws(src_space)
     symlink_compile_commands_for_all_pkgs(build_space, pkgs_with_path)
 
