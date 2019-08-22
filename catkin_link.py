@@ -5,6 +5,7 @@ import argparse
 import sys
 import subprocess
 import re
+from collections import defaultdict
 
 
 def get_active_profile(profile_file):
@@ -48,38 +49,28 @@ def is_catkin_ws(ws_root):
             os.path.exists(src_space))
 
 
-def symlink_compile_commands_for_pkg(build_space, src_space, pkg_name):
+def symlink_compile_commands_for_pkg(pkg_build_space, pkg_src_space):
     compile_commands_name = "compile_commands.json"
-    compile_commands_file = os.path.join(build_space, pkg_name,
+    compile_commands_file = os.path.join(pkg_build_space,
                                          compile_commands_name)
 
     if not os.path.exists(compile_commands_file):
         print(("Compile commands file '{0}' for pkg '{1}' does not "
-               "exist - skipping".format(compile_commands_file, pkg_name)))
+               "exist - skipping".format(compile_commands_file,
+                                         os.path.basename(pkg_build_space))))
         return
 
-    pkg_in_src_space = os.path.join(src_space, pkg_name)
-    if not os.path.exists(pkg_in_src_space):
-        return
-
-    target = os.path.join(pkg_in_src_space, compile_commands_name)
+    target = os.path.join(pkg_src_space, compile_commands_name)
     proc = subprocess.run(["ln", "-sf", compile_commands_file, target])
     if proc.returncode != 0:
         print("Could not symlink '{0}' to '{1}' - returncode '{2}'".format(
             compile_commands_file, target, proc.returncode), file=sys.stderr)
 
 
-def symlink_compile_commands_for_all_pkgs(build_space, src_space):
-    dirs = os.listdir(build_space)
-
-    # ignore hidden files
-    dirs = filter(lambda d: d[0] != ".", dirs)
-    # skip catkin folders
-    folders_to_ignore = ["catkin_tools_prebuild"]
-    dirs_to_symlink = filter(lambda d: d not in folders_to_ignore, dirs)
-
-    for pkg in dirs_to_symlink:
-        symlink_compile_commands_for_pkg(build_space, src_space, pkg)
+def symlink_compile_commands_for_all_pkgs(build_space, pkgs_with_path):
+    for pkg_name, pkg_src_space in pkgs_with_path.items():
+        pkg_build_space = os.path.join(build_space, pkg_name)
+        symlink_compile_commands_for_pkg(pkg_build_space, pkg_src_space)
 
 
 def get_build_space(ws_root):
@@ -99,6 +90,66 @@ def get_build_space(ws_root):
     return build_space
 
 
+def get_content_of_file(file_path):
+    if not os.path.exists(file_path):
+        return None
+
+    content = None
+    with open(file_path, 'r') as file_obj:
+        content = file_obj.read()
+    return content
+
+
+def is_catkin_pkg(cmake_lists_file):
+    content = get_content_of_file(cmake_lists_file)
+    if not content:
+        return False
+
+    catkin_pkg_re = re.compile(r"^\s*?find_package\s*?\(\s*?catkin\s+",
+                               re.MULTILINE)
+
+    return re.search(catkin_pkg_re, content)
+
+
+def get_pkg_name(cmake_lists_file):
+    content = get_content_of_file(cmake_lists_file)
+    if not content:
+        return None
+
+    project_re = re.compile(r"^\s*?project\s*?\(\s*?([\w_-]+)\s*?\)",
+                            re.MULTILINE)
+    match = re.search(project_re, content)
+
+    if not match:
+        return None
+
+    return match.group(1)
+
+
+def get_pkgs_in_ws(src_space):
+    pkg_name_with_path = defaultdict(str)
+
+    for root, dirs, files in os.walk(src_space, followlinks=True):
+        # are we in a package?
+        if "CMakeLists.txt" in files:
+            cmake_lists_file = os.path.join(root, "CMakeLists.txt")
+
+            if not is_catkin_pkg(cmake_lists_file):
+                continue
+
+            pkg_name = get_pkg_name(cmake_lists_file)
+
+            if not pkg_name:
+                print(("Can not retrieve package name from '{0}' "
+                       "- skipping").format(cmake_lists_file))
+                continue
+
+            pkg_name_with_path[pkg_name] = os.path.abspath(root)
+            dirs[:] = []
+
+    return pkg_name_with_path
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("ws_root", help="the workspace root")
@@ -115,7 +166,8 @@ def main():
         print("Can not get build space - aborting", file=sys.stderr)
     src_space = os.path.join(abs_ws_root, "src")
 
-    symlink_compile_commands_for_all_pkgs(build_space, src_space)
+    pkgs_with_path = get_pkgs_in_ws(src_space)
+    symlink_compile_commands_for_all_pkgs(build_space, pkgs_with_path)
 
 
 if __name__ == "__main__":
