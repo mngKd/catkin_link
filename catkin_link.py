@@ -4,7 +4,6 @@ import os
 import argparse
 import sys
 import subprocess
-# import yaml
 import re
 
 
@@ -83,6 +82,23 @@ def symlink_compile_commands_for_all_pkgs(build_space, src_space):
         symlink_compile_commands_for_pkg(build_space, src_space, pkg)
 
 
+def get_build_space(ws_root):
+    cur_dir = os.getcwd()
+
+    build_space = None
+
+    try:
+        os.chdir(ws_root)
+        ret = subprocess.run(["/usr/bin/catkin", "locate", "-b"],
+                             stdout=subprocess.PIPE,
+                             universal_newlines=True)
+        build_space = ret.stdout.strip()
+    finally:
+        os.chdir(cur_dir)
+
+    return build_space
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("ws_root", help="the workspace root")
@@ -94,18 +110,9 @@ def main():
         print(("Given argument '{0}' is not a catkin workspace -"
                " aborting".format(abs_ws_root)))
 
-    profile_folder = os.path.join(abs_ws_root, ".catkin_tools", "profiles")
-    if not os.path.exists(profile_folder):
-        print("Can not find profile folder '{0}' - aborting".format(
-            profile_folder))
-
-    profile_file = os.path.join(profile_folder, "profiles.yaml")
-    active_profile = get_active_profile(profile_file)
-    print("Active profile:", active_profile)
-
-    build_space = os.path.join(abs_ws_root, "build")
-    if active_profile != "default":
-        build_space = os.path.join(build_space, active_profile)
+    build_space = get_build_space(abs_ws_root)
+    if not build_space:
+        print("Can not get build space - aborting", file=sys.stderr)
     src_space = os.path.join(abs_ws_root, "src")
 
     symlink_compile_commands_for_all_pkgs(build_space, src_space)
