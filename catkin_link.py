@@ -8,38 +8,6 @@ import re
 from collections import defaultdict
 
 
-def get_active_profile(profile_file):
-    if not os.path.exists(profile_file):
-        # is this a default workspace?
-        default_profile = os.path.join(os.path.dirname(profile_file),
-                                       "default")
-        if os.path.exists(default_profile):
-            return "default"
-
-        # sth. is wrong with the workspace
-        print(("Profile file '{0}' does not exist and neither the default "
-               "profile folder '{1}' - sth. is wrong").format(profile_file,
-                                                              default_profile),
-              file=sys.stderr)
-        sys.exit(1)
-
-    # read profile.yaml file
-    content = []
-    with open(profile_file, 'r') as file_obj:
-        content = file_obj.read().replace('\n', '')
-
-    re_str = re.compile(r"^active:\s*?([\w_-]+)")
-    match = re.search(re_str, content)
-
-    if not match:
-        print("Can not retrieve profile from '{0}'".format(profile_file),
-              file=sys.stderr)
-        sys.exit(1)
-
-    active_profile = match.group(1)
-    return active_profile
-
-
 def is_catkin_ws(ws_root):
     catkin_tools_folder = os.path.join(ws_root, ".catkin_tools")
     build_space = os.path.join(ws_root, "build")
