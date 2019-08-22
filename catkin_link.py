@@ -4,6 +4,40 @@ import os
 import argparse
 import sys
 import subprocess
+# import yaml
+import re
+
+
+def get_active_profile(profile_file):
+    if not os.path.exists(profile_file):
+        # is this a default workspace?
+        default_profile = os.path.join(os.path.dirname(profile_file),
+                                       "default")
+        if os.path.exists(default_profile):
+            return "default"
+
+        # sth. is wrong with the workspace
+        print(("Profile file '{0}' does not exist and neither the default "
+               "profile folder '{1}' - sth. is wrong").format(profile_file,
+                                                              default_profile),
+              file=sys.stderr)
+        sys.exit(1)
+
+    # read profile.yaml file
+    content = []
+    with open(profile_file, 'r') as file_obj:
+        content = file_obj.read().replace('\n', '')
+
+    re_str = re.compile(r"^active:\s*?([\w_-]+)")
+    match = re.search(re_str, content)
+
+    if not match:
+        print("Can not retrieve profile from '{0}'".format(profile_file),
+              file=sys.stderr)
+        sys.exit(1)
+
+    active_profile = match.group(1)
+    return active_profile
 
 
 def is_catkin_ws(ws_root):
@@ -36,9 +70,7 @@ def symlink_compile_commands_for_pkg(build_space, src_space, pkg_name):
             compile_commands_file, target, proc.returncode), file=sys.stderr)
 
 
-def symlink_compile_commands_for_all_pkgs(ws_root):
-    build_space = os.path.join(ws_root, "build")
-    src_space = os.path.join(ws_root, "src")
+def symlink_compile_commands_for_all_pkgs(build_space, src_space):
     dirs = os.listdir(build_space)
 
     # ignore hidden files
@@ -51,7 +83,7 @@ def symlink_compile_commands_for_all_pkgs(ws_root):
         symlink_compile_commands_for_pkg(build_space, src_space, pkg)
 
 
-if __name__ == "__main__":
+def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("ws_root", help="the workspace root")
 
@@ -62,4 +94,22 @@ if __name__ == "__main__":
         print(("Given argument '{0}' is not a catkin workspace -"
                " aborting".format(abs_ws_root)))
 
-    symlink_compile_commands_for_all_pkgs(abs_ws_root)
+    profile_folder = os.path.join(abs_ws_root, ".catkin_tools", "profiles")
+    if not os.path.exists(profile_folder):
+        print("Can not find profile folder '{0}' - aborting".format(
+            profile_folder))
+
+    profile_file = os.path.join(profile_folder, "profiles.yaml")
+    active_profile = get_active_profile(profile_file)
+    print("Active profile:", active_profile)
+
+    build_space = os.path.join(abs_ws_root, "build")
+    if active_profile != "default":
+        build_space = os.path.join(build_space, active_profile)
+    src_space = os.path.join(abs_ws_root, "src")
+
+    symlink_compile_commands_for_all_pkgs(build_space, src_space)
+
+
+if __name__ == "__main__":
+    main()
